@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 REQUIRED_COLUMNS = [
     "time",
     "temperature_2m",
@@ -10,7 +9,10 @@ REQUIRED_COLUMNS = [
 ]
 
 
-def transform_weather_data(weather_data: dict, city: str) -> pd.DataFrame:
+def transform_weather_data(
+    weather_data: dict,
+    city: str,
+) -> pd.DataFrame:
     """Transforma os dados brutos da API em uma tabela limpa."""
 
     if "hourly" not in weather_data:
@@ -19,15 +21,11 @@ def transform_weather_data(weather_data: dict, city: str) -> pd.DataFrame:
     dataframe = pd.DataFrame(weather_data["hourly"])
 
     missing_columns = [
-        column
-        for column in REQUIRED_COLUMNS
-        if column not in dataframe.columns
+        column for column in REQUIRED_COLUMNS if column not in dataframe.columns
     ]
 
     if missing_columns:
-        raise ValueError(
-            f"Colunas obrigatórias ausentes: {missing_columns}"
-        )
+        raise ValueError(f"Colunas obrigatórias ausentes: {missing_columns}")
 
     dataframe = dataframe[REQUIRED_COLUMNS].copy()
 
@@ -49,24 +47,20 @@ def transform_weather_data(weather_data: dict, city: str) -> pd.DataFrame:
             errors="coerce",
         )
 
-    dataframe = dataframe.dropna(
-        subset=["time", "temperature_2m"]
-    )
+    dataframe = dataframe.dropna(subset=["time", "temperature_2m"])
 
-    dataframe = dataframe.drop_duplicates(
-        subset=["time"]
-    )
+    dataframe = dataframe.drop_duplicates(subset=["time"])
 
-    dataframe[numeric_columns] = dataframe[
-        numeric_columns
-    ].interpolate(limit_direction="both")
+    dataframe[numeric_columns] = dataframe[numeric_columns].interpolate(
+        limit_direction="both"
+    )
 
     dataframe = dataframe.rename(
         columns={
             "time": "datetime",
             "temperature_2m": "temperature_c",
             "relative_humidity_2m": "humidity_pct",
-            "precipitation_probability": "rain_probability_pct",
+            "precipitation_probability": ("rain_probability_pct"),
             "wind_speed_10m": "wind_speed_kmh",
         }
     )
@@ -80,3 +74,45 @@ def transform_weather_data(weather_data: dict, city: str) -> pd.DataFrame:
     dataframe = dataframe.reset_index(drop=True)
 
     return dataframe
+
+
+def create_daily_summary(
+    dataframe: pd.DataFrame,
+) -> pd.DataFrame:
+    """Cria indicadores meteorológicos agrupados por dia."""
+
+    daily_summary = (
+        dataframe.groupby(
+            ["date", "city"],
+            as_index=False,
+        )
+        .agg(
+            min_temperature_c=(
+                "temperature_c",
+                "min",
+            ),
+            avg_temperature_c=(
+                "temperature_c",
+                "mean",
+            ),
+            max_temperature_c=(
+                "temperature_c",
+                "max",
+            ),
+            avg_humidity_pct=(
+                "humidity_pct",
+                "mean",
+            ),
+            max_rain_probability_pct=(
+                "rain_probability_pct",
+                "max",
+            ),
+            max_wind_speed_kmh=(
+                "wind_speed_kmh",
+                "max",
+            ),
+        )
+        .round(2)
+    )
+
+    return daily_summary
