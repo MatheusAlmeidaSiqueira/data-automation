@@ -1,29 +1,20 @@
 from data_automation.config import CITY
-from data_automation.extract import fetch_weather_data
-from data_automation.load import export_weather_data
-from data_automation.transform import transform_weather_data
+from data_automation.pipeline import run_pipeline
 
 
 def main() -> None:
     print(f"Buscando dados meteorológicos de {CITY}...")
 
-    weather_data = fetch_weather_data()
-
-    print("Transformando e limpando os dados...")
-
-    dataframe = transform_weather_data(
-        weather_data=weather_data,
-        city=CITY,
-    )
-
+    print("Transformando, validando e resumindo os dados...")
     print("Gerando arquivos CSV e Excel...")
 
-    csv_path, excel_path = export_weather_data(dataframe)
+    dataframe, daily_dataframe, csv_path, excel_path = run_pipeline()
 
     print("\nProcessamento concluído com sucesso!")
     print(f"Quantidade de registros: {len(dataframe)}")
     print(f"Valores vazios: {dataframe.isna().sum().sum()}")
     print(f"Registros duplicados: {dataframe.duplicated().sum()}")
+    print(f"Dias resumidos: {len(daily_dataframe)}")
 
     print("\nPrimeiros cinco registros:")
     print(dataframe.head())
