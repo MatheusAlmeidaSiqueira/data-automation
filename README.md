@@ -207,17 +207,69 @@ http://localhost:8501
 
 ---
 
-## Executando o frontend
+## Executando a plataforma web localmente
 
-É necessário ter Node.js 22 ou superior.
+### Pré-requisitos
 
-Utilizando Git Bash ou WSL:
+- Node.js 22 ou superior;
+- npm;
+- Python 3.11 ou superior;
+- Git for Windows, incluindo Git Bash.
+
+Entre na pasta do frontend:
 
 ```bash
 cd frontend
-npm install
+```
+
+Instale as dependências:
+
+```bash
+npm ci
+```
+
+Inicie a plataforma:
+
+```bash
 npm run dev
 ```
+
+Acesse no navegador:
+
+```text
+http://localhost:5173
+```
+
+### Preparação do banco D1 local
+
+Na primeira execução, mantenha a plataforma aberta e abra um segundo terminal na pasta `frontend`.
+
+Execute:
+
+```bash
+npm run db:local
+```
+
+Esse comando localiza automaticamente o banco D1 criado pelo ambiente de desenvolvimento e aplica apenas as migrações pendentes.
+
+Depois, atualize a página no navegador.
+
+Nas próximas execuções, normalmente será necessário apenas:
+
+```bash
+npm run dev
+```
+
+### Comandos disponíveis
+
+| Comando            | Finalidade                                |
+| ------------------ | ----------------------------------------- |
+| `npm run dev`      | Inicia a plataforma em desenvolvimento    |
+| `npm run db:local` | Prepara e atualiza o banco D1 local       |
+| `npm run build`    | Gera a versão de produção                 |
+| `npm test`         | Executa o build e os testes automatizados |
+
+> No Windows, execute `npm test` com o Git Bash disponível no `PATH`, pois o processo de build utiliza scripts Bash.
 
 ---
 
