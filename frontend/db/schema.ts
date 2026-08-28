@@ -17,6 +17,8 @@ export const weatherForecasts = sqliteTable("weather_forecasts", {
   temperature: real("temperature").notNull(),
   humidity: real("humidity").notNull(),
   rainProbability: real("rain_probability").notNull(),
+  rainMetric: text("rain_metric").notNull().default("probability"),
+  provider: text("provider").notNull().default("open_meteo"),
   windSpeed: real("wind_speed").notNull(),
   collectedAt: text("collected_at").notNull(),
 }, (table) => [
@@ -31,5 +33,6 @@ export const pipelineRuns = sqliteTable("pipeline_runs", {
   status: text("status").notNull(),
   fetchedRecords: integer("fetched_records").notNull(),
   rejectedRecords: integer("rejected_records").notNull(),
+  provider: text("provider").notNull().default("open_meteo"),
   message: text("message"),
 });

@@ -18,7 +18,7 @@ O projeto combina um pipeline ETL em Python com uma plataforma web interativa, o
 
 O WeatherFlow Analytics foi desenvolvido como um projeto completo de portfólio em engenharia de dados e desenvolvimento de software.
 
-A aplicação consome dados reais da API Open-Meteo, executa processos de validação e transformação e apresenta as informações em dashboards interativos.
+A aplicação consome dados reais da Open-Meteo e usa o MET Norway como contingência independente, executa processos de validação e transformação e apresenta as informações em dashboards interativos.
 
 O projeto demonstra conhecimentos em:
 
@@ -38,6 +38,8 @@ O projeto demonstra conhecimentos em:
 
 - Coleta de dados meteorológicos reais;
 - Atualização automática das informações;
+- Coleta horária independente de acessos por GitHub Actions;
+- Monitoramento da última execução e da fonte meteorológica ativa;
 - API interna para centralizar a integração meteorológica;
 - Persistência de observações e previsões em banco de dados;
 - Registro auditável das execuções do pipeline;
@@ -91,6 +93,7 @@ Responsável por apresentar os indicadores, gráficos, previsões, filtros, aná
 - PyTest
 - Plotly
 - Open-Meteo API
+- MET Norway Locationforecast API
 
 ### Plataforma web
 
@@ -250,7 +253,7 @@ O GitHub Actions executa automaticamente as validações de Python e frontend a 
 
 ## Dados
 
-Os dados são obtidos da API pública Open-Meteo.
+Os dados são obtidos da API pública Open-Meteo, com contingência pela API oficial MET Norway quando a fonte principal estiver temporariamente limitada.
 
 Os arquivos CSV e Excel gerados pelo pipeline ficam armazenados apenas no ambiente local e não são enviados ao GitHub.
 
