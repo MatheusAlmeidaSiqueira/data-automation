@@ -49,4 +49,9 @@ if [[ "$#" -eq 0 ]]; then
 fi
 
 cd "${project_root}"
+if [[ "${1}" == *.sh ]]; then
+  script="${1}"
+  shift
+  exec bash "${script}" "$@"
+fi
 exec "$@"
