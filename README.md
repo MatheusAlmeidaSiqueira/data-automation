@@ -1,5 +1,10 @@
 # WeatherFlow Analytics
 
+[![Tests](https://github.com/MatheusAlmeidaSiqueira/data-automation/actions/workflows/tests.yml/badge.svg)](https://github.com/MatheusAlmeidaSiqueira/data-automation/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-Frontend-3178C6?logo=typescript&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-22a06b)
+
 Plataforma de engenharia e análise de dados meteorológicos desenvolvida para coletar, transformar, validar e visualizar dados reais de Guarulhos — SP.
 
 O projeto combina um pipeline ETL em Python com uma plataforma web interativa, oferecendo indicadores meteorológicos, análise histórica, previsão do tempo, índice de risco climático e exportação de dados.
@@ -33,6 +38,9 @@ O projeto demonstra conhecimentos em:
 
 - Coleta de dados meteorológicos reais;
 - Atualização automática das informações;
+- API interna para centralizar a integração meteorológica;
+- Persistência de observações e previsões em banco de dados;
+- Registro auditável das execuções do pipeline;
 - Consulta de milhares de registros históricos;
 - Previsão meteorológica para os próximos dias;
 - Indicadores de temperatura, umidade, chuva e vento;
@@ -55,9 +63,9 @@ O projeto demonstra conhecimentos em:
 flowchart LR
     API["Open-Meteo API"] --> EXTRACT["Extração"]
     EXTRACT --> TRANSFORM["Transformação e validação"]
-    TRANSFORM --> DATA["Dados processados"]
-    DATA --> REPORTS["CSV e Excel"]
-    DATA --> DASHBOARD["Dashboard analítico"]
+    TRANSFORM --> DATABASE["Banco histórico"]
+    DATABASE --> REPORTS["CSV e Excel"]
+    DATABASE --> DASHBOARD["Dashboard analítico"]
 ```
 
 O sistema está dividido em duas partes principais:
@@ -94,6 +102,7 @@ Responsável por apresentar os indicadores, gráficos, previsões, filtros, aná
 - Shadcn UI
 - Lucide Icons
 - Cloudflare Workers
+- Cloudflare D1
 - Drizzle ORM
 
 ### Qualidade e versionamento
@@ -226,6 +235,17 @@ Os testes verificam:
 - geração das visualizações;
 - componentes principais da interface.
 
+Para validar lint, testes e build do frontend:
+
+```bash
+cd frontend
+npm ci
+npm run lint
+npm test
+```
+
+O GitHub Actions executa automaticamente as validações de Python e frontend a cada push e pull request.
+
 ---
 
 ## Dados
@@ -250,17 +270,18 @@ Isso mantém o repositório leve e permite que os relatórios sejam atualizados 
 - Exportação de dados;
 - Integração contínua com GitHub Actions;
 - Frontend independente do pipeline Python.
+- API interna em execução server-side;
+- Banco histórico com migrações versionadas;
+- Armazenamento de previsões para auditoria e cálculo futuro de precisão.
 
 ---
 
 ## Próximas evoluções
 
-- Persistência histórica em banco de dados;
-- API própria para integração entre pipeline e frontend;
-- Comparação entre previsão e dados observados;
-- Métricas de precisão meteorológica;
-- Monitoramento das execuções do pipeline;
-- Expansão para outras cidades brasileiras.
+- Coleta agendada independente dos acessos à plataforma;
+- Evolução das métricas de precisão conforme o histórico próprio cresce;
+- Alertas automáticos para falhas nas fontes de dados;
+- Expansão configurável para outras cidades brasileiras.
 
 ---
 
@@ -277,4 +298,4 @@ Estudante de Engenharia de Software e Eletrônica Industrial, com interesse em d
 
 ## Licença
 
-Projeto desenvolvido para fins educacionais e de portfólio.
+Distribuído sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE).
