@@ -64,3 +64,9 @@ frontend/dist/
 frontend/.wrangler/
 frontend/.sites-runtime/
 
+# Resultados gerados pelo pipeline
+data/processed/
+data/raw/
+
+
+
