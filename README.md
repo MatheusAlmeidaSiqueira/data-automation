@@ -3,14 +3,22 @@
 [![Tests](https://github.com/MatheusAlmeidaSiqueira/data-automation/actions/workflows/tests.yml/badge.svg)](https://github.com/MatheusAlmeidaSiqueira/data-automation/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Frontend-3178C6?logo=typescript&logoColor=white)
+![Cloudflare D1](https://img.shields.io/badge/Cloudflare-D1-F38020?logo=cloudflare&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-22a06b)
 
-Plataforma de engenharia e análise de dados meteorológicos desenvolvida para coletar, transformar, validar e visualizar dados reais de Guarulhos — SP.
+Plataforma de engenharia e análise de dados meteorológicos desenvolvida para coletar, transformar, validar, armazenar e visualizar dados reais de Guarulhos — SP.
 
-O projeto combina um pipeline ETL em Python com uma plataforma web interativa, oferecendo indicadores meteorológicos, análise histórica, previsão do tempo, índice de risco climático e exportação de dados.
+O projeto combina um pipeline ETL em Python, uma API interna, banco de dados histórico e uma plataforma web interativa. A aplicação oferece indicadores meteorológicos, análise histórica, previsão do tempo, índice de risco climático, monitoramento do pipeline e exportação de dados.
 
 🌐 **Plataforma publicada:**
+
 [matheus-analytics-guarulhos.matheusalmeidasiquei.chatgpt.site](https://matheus-analytics-guarulhos.matheusalmeidasiquei.chatgpt.site)
+
+## Demonstração da plataforma
+
+[![Dashboard do WeatherFlow Analytics](docs/weatherflow-dashboard.png)](https://matheus-analytics-guarulhos.matheusalmeidasiquei.chatgpt.site)
+
+> Dashboard com dados meteorológicos reais, previsão diária, histórico analítico, indicadores de qualidade e monitoramento automatizado do pipeline.
 
 ---
 
@@ -18,17 +26,19 @@ O projeto combina um pipeline ETL em Python com uma plataforma web interativa, o
 
 O WeatherFlow Analytics foi desenvolvido como um projeto completo de portfólio em engenharia de dados e desenvolvimento de software.
 
-A aplicação consome dados reais da Open-Meteo e usa o MET Norway como contingência independente, executa processos de validação e transformação e apresenta as informações em dashboards interativos.
+A aplicação consome dados meteorológicos reais da Open-Meteo e utiliza o MET Norway como fonte de contingência. Os dados passam por processos de extração, validação, transformação e persistência antes de serem apresentados na plataforma.
 
 O projeto demonstra conhecimentos em:
 
 - Python e automação;
 - pipelines ETL;
 - tratamento e validação de dados;
+- SQL e persistência histórica;
+- APIs e integração de sistemas;
 - testes automatizados;
 - análise de dados meteorológicos;
 - visualização de dados;
-- desenvolvimento frontend com React e TypeScript;
+- React e TypeScript;
 - Git, GitHub e integração contínua;
 - organização profissional de software.
 
@@ -36,49 +46,66 @@ O projeto demonstra conhecimentos em:
 
 ## Funcionalidades
 
+### Dados e automação
+
 - Coleta de dados meteorológicos reais;
 - Atualização automática das informações;
 - Coleta horária independente de acessos por GitHub Actions;
-- Monitoramento da última execução e da fonte meteorológica ativa;
-- API interna para centralizar a integração meteorológica;
-- Persistência de observações e previsões em banco de dados;
+- Fonte principal pela Open-Meteo;
+- Contingência independente pela API oficial MET Norway;
+- Validação e rejeição de registros inválidos;
+- Persistência de observações e previsões;
 - Registro auditável das execuções do pipeline;
-- Consulta de milhares de registros históricos;
-- Previsão meteorológica para os próximos dias;
+- Geração de arquivos CSV e relatórios em Excel.
+
+### Plataforma analítica
+
 - Indicadores de temperatura, umidade, chuva e vento;
-- WeatherFlow Risk Index para análise de risco climático;
+- Previsão meteorológica para os próximos dias;
+- Consulta de dados históricos;
 - Gráficos interativos de temperatura e precipitação;
 - Filtros de 16 dias, 30 dias, 90 dias e 1 ano;
 - Pesquisa de registros por data;
-- Validação e rejeição de registros inválidos;
-- Cálculo da qualidade dos dados;
+- Métricas de qualidade dos dados;
 - Exportação completa para CSV;
-- Geração de relatórios em Excel;
-- Interface responsiva para computador, tablet e celular;
-- Testes automatizados do pipeline e da visualização.
+- Interface responsiva para computador, tablet e celular.
+
+### Indicador exclusivo
+
+O **WeatherFlow Risk Index** transforma chuva, vento e amplitude térmica em uma pontuação de risco meteorológico de 0 a 100.
+
+O indicador foi desenvolvido para facilitar a interpretação das condições previstas nas próximas 24 horas.
 
 ---
 
 ## Arquitetura
 
 ```mermaid
-flowchart LR
-    API["Open-Meteo API"] --> EXTRACT["Extração"]
-    EXTRACT --> TRANSFORM["Transformação e validação"]
-    TRANSFORM --> DATABASE["Banco histórico"]
-    DATABASE --> REPORTS["CSV e Excel"]
-    DATABASE --> DASHBOARD["Dashboard analítico"]
+flowchart TD
+    SOURCES["Open-Meteo e MET Norway"] --> API["API meteorológica interna"]
+    API --> ETL["Validação e transformação"]
+    ETL --> D1["Banco histórico Cloudflare D1"]
+    ETL --> REPORTS["Relatórios CSV e Excel"]
+    D1 --> DASHBOARD["Dashboard WeatherFlow"]
 ```
 
-O sistema está dividido em duas partes principais:
+O sistema está dividido em quatro partes principais:
 
 ### Pipeline de dados
 
 Responsável pela extração, limpeza, validação, transformação e exportação dos dados meteorológicos.
 
+### API interna
+
+Centraliza a consulta das fontes meteorológicas, aplica contingência e fornece dados padronizados para o frontend.
+
+### Banco histórico
+
+Armazena observações, previsões e execuções do pipeline em tabelas versionadas por migrações SQL.
+
 ### Plataforma web
 
-Responsável por apresentar os indicadores, gráficos, previsões, filtros, análises e downloads em uma interface profissional.
+Apresenta indicadores, gráficos, previsões, filtros, análises e downloads em uma interface responsiva.
 
 ---
 
@@ -86,35 +113,37 @@ Responsável por apresentar os indicadores, gráficos, previsões, filtros, aná
 
 ### Dados e automação
 
-- Python 3.11
-- Pandas
-- Requests
-- OpenPyXL
-- PyTest
-- Plotly
-- Open-Meteo API
-- MET Norway Locationforecast API
+- Python 3.11;
+- Pandas;
+- Requests;
+- OpenPyXL;
+- PyTest;
+- Plotly;
+- Open-Meteo API;
+- MET Norway Locationforecast API.
 
 ### Plataforma web
 
-- TypeScript
-- React
-- Next.js
-- Vinext
-- Tailwind CSS
-- Shadcn UI
-- Lucide Icons
-- Cloudflare Workers
-- Cloudflare D1
-- Drizzle ORM
+- TypeScript;
+- React;
+- Next.js;
+- Vinext;
+- Tailwind CSS;
+- Shadcn UI;
+- Lucide Icons;
+- Cloudflare Workers;
+- Cloudflare D1;
+- Drizzle ORM.
 
 ### Qualidade e versionamento
 
-- Git
-- GitHub
-- GitHub Actions
-- ESLint
-- Testes automatizados
+- Git;
+- GitHub;
+- GitHub Actions;
+- ESLint;
+- testes automatizados;
+- migrações SQL versionadas;
+- integração contínua.
 
 ---
 
@@ -123,19 +152,28 @@ Responsável por apresentar os indicadores, gráficos, previsões, filtros, aná
 ```text
 data-automation/
 ├── .github/
-│   └── workflows/            # Integração contínua
-├── .streamlit/               # Configuração do dashboard Python
+│   └── workflows/
+│       ├── tests.yml
+│       └── collect-weather.yml
+├── .streamlit/
 ├── data/
-│   ├── raw/                  # Dados brutos locais
-│   └── processed/            # Dados processados
-├── frontend/                 # Plataforma web profissional
+│   ├── raw/
+│   └── processed/
+├── docs/
+│   └── weatherflow-dashboard.png
+├── frontend/
 │   ├── app/
+│   │   └── api/
 │   ├── components/
+│   ├── db/
+│   ├── drizzle/
 │   ├── public/
+│   ├── scripts/
+│   │   └── setup-local-db.py
 │   ├── tests/
 │   └── package.json
-├── notebooks/                # Análises exploratórias
-├── reports/                  # Relatórios gerados
+├── notebooks/
+├── reports/
 ├── src/
 │   └── data_automation/
 │       ├── config.py
@@ -144,10 +182,12 @@ data-automation/
 │       ├── load.py
 │       ├── pipeline.py
 │       └── visualization.py
-├── tests/                    # Testes do pipeline Python
-├── app.py                    # Aplicação Streamlit
+├── tests/
+├── app.py
 ├── pytest.ini
-└── requirements.txt
+├── requirements.txt
+├── LICENSE
+└── README.md
 ```
 
 ---
@@ -167,7 +207,7 @@ Crie o ambiente virtual:
 python -m venv .venv
 ```
 
-Ative no Windows:
+Ative o ambiente no Windows:
 
 ```bat
 .venv\Scripts\activate
@@ -191,15 +231,24 @@ Execute o pipeline:
 python -m data_automation
 ```
 
+Os arquivos gerados ficam disponíveis em:
+
+```text
+data/processed/weather_data.csv
+data/processed/weather_report.xlsx
+```
+
 ---
 
 ## Executando o dashboard Streamlit
+
+Na pasta principal do projeto, execute:
 
 ```bash
 streamlit run app.py
 ```
 
-A aplicação será aberta no navegador em:
+A aplicação será aberta em:
 
 ```text
 http://localhost:8501
@@ -250,7 +299,7 @@ Execute:
 npm run db:local
 ```
 
-Esse comando localiza automaticamente o banco D1 criado pelo ambiente de desenvolvimento e aplica apenas as migrações pendentes.
+O comando localiza automaticamente o banco D1 criado pelo ambiente de desenvolvimento e aplica somente as migrações pendentes.
 
 Depois, atualize a página no navegador.
 
@@ -267,15 +316,16 @@ npm run dev
 | `npm run dev`      | Inicia a plataforma em desenvolvimento    |
 | `npm run db:local` | Prepara e atualiza o banco D1 local       |
 | `npm run build`    | Gera a versão de produção                 |
+| `npm run lint`     | Verifica a qualidade do código frontend   |
 | `npm test`         | Executa o build e os testes automatizados |
 
-> No Windows, execute `npm test` com o Git Bash disponível no `PATH`, pois o processo de build utiliza scripts Bash.
+> No Windows, o comando `npm test` precisa do Git Bash disponível no `PATH`, pois o processo de build utiliza scripts Bash.
 
 ---
 
 ## Testes automatizados
 
-Execute os testes Python:
+Execute os testes do pipeline Python:
 
 ```bash
 pytest -v
@@ -287,10 +337,9 @@ Os testes verificam:
 - rejeição de respostas inválidas;
 - geração do resumo diário;
 - criação dos arquivos CSV e Excel;
-- geração das visualizações;
-- componentes principais da interface.
+- geração das visualizações.
 
-Para validar lint, testes e build do frontend:
+Para validar o frontend:
 
 ```bash
 cd frontend
@@ -299,44 +348,88 @@ npm run lint
 npm test
 ```
 
+A suíte do frontend verifica:
+
+- consumo da API meteorológica interna;
+- validação e persistência dos registros;
+- estrutura das migrações do banco;
+- geração do build de produção.
+
 O GitHub Actions executa automaticamente as validações de Python e frontend a cada push e pull request.
 
 ---
 
-## Dados
+## Automação da coleta
 
-Os dados são obtidos da API pública Open-Meteo, com contingência pela API oficial MET Norway quando a fonte principal estiver temporariamente limitada.
+O workflow `collect-weather.yml` executa a coleta meteorológica automaticamente pelo GitHub Actions.
 
-Os arquivos CSV e Excel gerados pelo pipeline ficam armazenados apenas no ambiente local e não são enviados ao GitHub.
+Essa automação permite atualizar o histórico mesmo quando nenhum usuário acessa a plataforma.
 
-Isso mantém o repositório leve e permite que os relatórios sejam atualizados sempre que o pipeline for executado.
+A execução também pode ser iniciada manualmente na área **Actions** do repositório.
+
+---
+
+## Banco de dados
+
+O projeto utiliza Cloudflare D1, baseado em SQLite, para armazenar:
+
+- observações meteorológicas;
+- previsões;
+- fonte utilizada em cada consulta;
+- execuções do pipeline;
+- status das atualizações;
+- registros necessários para auditoria.
+
+As alterações estruturais são controladas por migrações SQL versionadas na pasta:
+
+```text
+frontend/drizzle/
+```
+
+---
+
+## Dados e relatórios
+
+Os dados são obtidos pela API pública Open-Meteo, com contingência pela API oficial MET Norway quando a fonte principal estiver temporariamente indisponível.
+
+Os relatórios locais são gerados nos formatos:
+
+- CSV, para análise e integração;
+- Excel, para consulta e apresentação.
+
+Os arquivos gerados ficam apenas no ambiente local e não são enviados ao GitHub. Isso mantém o repositório leve e permite que os relatórios sejam atualizados sempre que o pipeline for executado.
 
 ---
 
 ## Diferenciais técnicos
 
 - Separação clara entre extração, transformação, carregamento e visualização;
-- Código modular e organizado;
-- Validação de registros incompletos;
-- Métricas de qualidade dos dados;
-- Testes automatizados;
-- Atualização de dados reais;
-- Dashboard responsivo;
-- Exportação de dados;
-- Integração contínua com GitHub Actions;
-- Frontend independente do pipeline Python.
-- API interna em execução server-side;
-- Banco histórico com migrações versionadas;
-- Armazenamento de previsões para auditoria e cálculo futuro de precisão.
+- arquitetura modular;
+- validação de registros incompletos;
+- métricas de qualidade dos dados;
+- API interna executada no servidor;
+- contingência entre fontes meteorológicas;
+- banco histórico com migrações versionadas;
+- armazenamento de previsões para auditoria;
+- automação independente de acessos;
+- monitoramento das execuções;
+- testes automatizados;
+- dashboard responsivo;
+- exportação de dados;
+- integração contínua com GitHub Actions;
+- ambiente local compatível com Windows;
+- frontend independente do pipeline Python.
 
 ---
 
 ## Próximas evoluções
 
-- Coleta agendada independente dos acessos à plataforma;
-- Evolução das métricas de precisão conforme o histórico próprio cresce;
-- Alertas automáticos para falhas nas fontes de dados;
-- Expansão configurável para outras cidades brasileiras.
+- Comparação entre previsão armazenada e condição observada;
+- cálculo de métricas de precisão meteorológica;
+- alertas automáticos para falhas nas fontes de dados;
+- painel de disponibilidade das integrações;
+- expansão configurável para outras cidades brasileiras;
+- autenticação para recursos administrativos.
 
 ---
 
