@@ -1,113 +1,280 @@
-# vinext-starter
+# WeatherFlow Analytics
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Plataforma de engenharia e análise de dados meteorológicos desenvolvida para coletar, transformar, validar e visualizar dados reais de Guarulhos — SP.
 
-## Prerequisites
+O projeto combina um pipeline ETL em Python com uma plataforma web interativa, oferecendo indicadores meteorológicos, análise histórica, previsão do tempo, índice de risco climático e exportação de dados.
 
-- Node.js `>=22.13.0`
-- Linux with `flock`, `curl`, and GNU `timeout`
+🌐 **Plataforma publicada:**
+[matheus-analytics-guarulhos.matheusalmeidasiquei.chatgpt.site](https://matheus-analytics-guarulhos.matheusalmeidasiquei.chatgpt.site)
 
-## Sites Lifecycle
+---
 
-The Sites lifecycle CLI runs the locked dependency install before returning this checkout. Edit the source under `app/`, then checkpoint when a coherent milestone is ready to inspect or share. The remote Sites builder runs `npm run build` against the pushed commit. Do not repeat install or build as a normal pre-checkpoint step.
+## Visão geral
 
-This starter does not use `wrangler.jsonc`.
+O WeatherFlow Analytics foi desenvolvido como um projeto completo de portfólio em engenharia de dados e desenvolvimento de software.
 
-`install:ci` is intentionally a single, non-retrying `npm ci`. It refuses a concurrent install for the same project, consumes a matching image-seeded npm cache with `--prefer-offline` while retaining registry fallback for a missing cache object, otherwise downloads and verifies the complete vinext tarball recorded in `package-lock.json`, limits npm to one socket, and terminates a stalled install. `build` applies a short timeout. These helpers target Linux and use GNU `timeout`; they are not native macOS scripts.
+A aplicação consome dados reais da API Open-Meteo, executa processos de validação e transformação e apresenta as informações em dashboards interativos.
 
-Scripts that need writable project-scoped home, npm, XDG, and temporary paths use `scripts/sites-env.sh`. The `dev` and `start` scripts honor the caller's runtime environment and keep Wrangler logs inside the checkout. The generated `.sites-runtime/` directory is disposable and ignored by Git.
+O projeto demonstra conhecimentos em:
 
-## Included Shape
+- Python e automação;
+- pipelines ETL;
+- tratamento e validação de dados;
+- testes automatizados;
+- análise de dados meteorológicos;
+- visualização de dados;
+- desenvolvimento frontend com React e TypeScript;
+- Git, GitHub e integração contínua;
+- organização profissional de software.
 
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+---
 
-## Workspace Auth Headers
+## Funcionalidades
 
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
+- Coleta de dados meteorológicos reais;
+- Atualização automática das informações;
+- Consulta de milhares de registros históricos;
+- Previsão meteorológica para os próximos dias;
+- Indicadores de temperatura, umidade, chuva e vento;
+- WeatherFlow Risk Index para análise de risco climático;
+- Gráficos interativos de temperatura e precipitação;
+- Filtros de 16 dias, 30 dias, 90 dias e 1 ano;
+- Pesquisa de registros por data;
+- Validação e rejeição de registros inválidos;
+- Cálculo da qualidade dos dados;
+- Exportação completa para CSV;
+- Geração de relatórios em Excel;
+- Interface responsiva para computador, tablet e celular;
+- Testes automatizados do pipeline e da visualização.
 
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
+---
 
-Treat the full name as optional and fall back to email when it is absent:
+## Arquitetura
 
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```mermaid
+flowchart LR
+    API["Open-Meteo API"] --> EXTRACT["Extração"]
+    EXTRACT --> TRANSFORM["Transformação e validação"]
+    TRANSFORM --> DATA["Dados processados"]
+    DATA --> REPORTS["CSV e Excel"]
+    DATA --> DASHBOARD["Dashboard analítico"]
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+O sistema está dividido em duas partes principais:
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+### Pipeline de dados
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- In a Server Component, start sign-in with
-  `<a href={chatGPTSignInPath(returnTo)} target="_top">`. The auth helper
-  module is server-only; do not import it into a Client Component.
-- Do not use `fetch`, XHR, a client-side router, or a framework link that can
-  prefetch the sign-in route. SIWC must start as a top-level navigation.
-- Never request the AuthAPI authorization endpoint directly. The dispatch-owned
-  `/signin-with-chatgpt` route must start the SIWC flow.
-- Use `chatGPTSignOutPath(returnTo)` for browser sign-out links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+Responsável pela extração, limpeza, validação, transformação e exportação dos dados meteorológicos.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+### Plataforma web
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+Responsável por apresentar os indicadores, gráficos, previsões, filtros, análises e downloads em uma interface profissional.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+---
 
-## Diagnostic Commands
+## Tecnologias
 
-- `npm run install:ci`: perform the one bounded lockfile install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build the deployable Sites artifact
-- `npm run start`: start the built Vinext application
-- `npm test`: build and verify the rendered development-preview metadata
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+### Dados e automação
 
-Use build commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.
+- Python 3.11
+- Pandas
+- Requests
+- OpenPyXL
+- PyTest
+- Plotly
+- Open-Meteo API
 
-The timeout defaults can be overridden for a controlled canary with `SITES_INSTALL_TIMEOUT`, `SITES_INSTALL_KILL_AFTER`, `SITES_BUILD_TIMEOUT`, and `SITES_BUILD_KILL_AFTER`. A timeout fails the command; the helpers never retry an unchanged install or build.
+### Plataforma web
 
-## Learn More
+- TypeScript
+- React
+- Next.js
+- Vinext
+- Tailwind CSS
+- Shadcn UI
+- Lucide Icons
+- Cloudflare Workers
+- Drizzle ORM
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+### Qualidade e versionamento
+
+- Git
+- GitHub
+- GitHub Actions
+- ESLint
+- Testes automatizados
+
+---
+
+## Estrutura do projeto
+
+```text
+data-automation/
+├── .github/
+│   └── workflows/            # Integração contínua
+├── .streamlit/               # Configuração do dashboard Python
+├── data/
+│   ├── raw/                  # Dados brutos locais
+│   └── processed/            # Dados processados
+├── frontend/                 # Plataforma web profissional
+│   ├── app/
+│   ├── components/
+│   ├── public/
+│   ├── tests/
+│   └── package.json
+├── notebooks/                # Análises exploratórias
+├── reports/                  # Relatórios gerados
+├── src/
+│   └── data_automation/
+│       ├── config.py
+│       ├── extract.py
+│       ├── transform.py
+│       ├── load.py
+│       ├── pipeline.py
+│       └── visualization.py
+├── tests/                    # Testes do pipeline Python
+├── app.py                    # Aplicação Streamlit
+├── pytest.ini
+└── requirements.txt
+```
+
+---
+
+## Executando o pipeline Python
+
+Clone o projeto:
+
+```bash
+git clone https://github.com/MatheusAlmeidaSiqueira/data-automation.git
+cd data-automation
+```
+
+Crie o ambiente virtual:
+
+```bash
+python -m venv .venv
+```
+
+Ative no Windows:
+
+```bat
+.venv\Scripts\activate
+```
+
+Instale as dependências:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Configure o caminho dos módulos no Windows:
+
+```bat
+set PYTHONPATH=src
+```
+
+Execute o pipeline:
+
+```bash
+python -m data_automation
+```
+
+---
+
+## Executando o dashboard Streamlit
+
+```bash
+streamlit run app.py
+```
+
+A aplicação será aberta no navegador em:
+
+```text
+http://localhost:8501
+```
+
+---
+
+## Executando o frontend
+
+É necessário ter Node.js 22 ou superior.
+
+Utilizando Git Bash ou WSL:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## Testes automatizados
+
+Execute os testes Python:
+
+```bash
+pytest -v
+```
+
+Os testes verificam:
+
+- transformação e limpeza dos dados;
+- rejeição de respostas inválidas;
+- geração do resumo diário;
+- criação dos arquivos CSV e Excel;
+- geração das visualizações;
+- componentes principais da interface.
+
+---
+
+## Dados
+
+Os dados são obtidos da API pública Open-Meteo.
+
+Os arquivos CSV e Excel gerados pelo pipeline ficam armazenados apenas no ambiente local e não são enviados ao GitHub.
+
+Isso mantém o repositório leve e permite que os relatórios sejam atualizados sempre que o pipeline for executado.
+
+---
+
+## Diferenciais técnicos
+
+- Separação clara entre extração, transformação, carregamento e visualização;
+- Código modular e organizado;
+- Validação de registros incompletos;
+- Métricas de qualidade dos dados;
+- Testes automatizados;
+- Atualização de dados reais;
+- Dashboard responsivo;
+- Exportação de dados;
+- Integração contínua com GitHub Actions;
+- Frontend independente do pipeline Python.
+
+---
+
+## Próximas evoluções
+
+- Persistência histórica em banco de dados;
+- API própria para integração entre pipeline e frontend;
+- Comparação entre previsão e dados observados;
+- Métricas de precisão meteorológica;
+- Monitoramento das execuções do pipeline;
+- Expansão para outras cidades brasileiras.
+
+---
+
+## Autor
+
+**Matheus Almeida Siqueira**
+
+Estudante de Engenharia de Software e Eletrônica Industrial, com interesse em desenvolvimento de software, engenharia de dados, automação e inteligência artificial.
+
+- [GitHub](https://github.com/MatheusAlmeidaSiqueira)
+- [WeatherFlow Analytics](https://matheus-analytics-guarulhos.matheusalmeidasiquei.chatgpt.site)
+
+---
+
+## Licença
+
+Projeto desenvolvido para fins educacionais e de portfólio.
