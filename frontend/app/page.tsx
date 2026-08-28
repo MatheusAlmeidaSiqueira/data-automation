@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, CalendarDays, CheckCircle2, CloudRain, Database, Download, Droplets, ExternalLink, RefreshCw, Search, ShieldCheck, Thermometer, Wind } from "lucide-react";
+import { Activity, AlertTriangle, CalendarDays, CheckCircle2, CloudRain, Database, Download, Droplets, ExternalLink, History, RefreshCw, Search, ShieldCheck, Target, Thermometer, Wind } from "lucide-react";
 
 type WeatherPoint = { time: string; temperature: number; humidity: number; rain: number; wind: number; source: "historical" | "forecast" };
-type WeatherResponse = { hourly: { time: string[]; temperature_2m: number[]; relative_humidity_2m: number[]; precipitation_probability: number[]; wind_speed_10m: number[] } };
+type PersistenceMetrics = { status: string; observations: number; forecasts: number; accuracySamples: number; temperatureMae: number | null };
+type WeatherApiResponse = { points: WeatherPoint[]; invalidRecords: number; collectedAt: string; persistence: PersistenceMetrics };
 type Period = "forecast" | "30" | "90" | "365";
 const PERIODS: { value: Period; label: string }[] = [
   { value: "forecast", label: "Previsão 16d" },
@@ -54,40 +55,28 @@ export default function Home() {
   const [loading, setLoading] = useState(true), [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [nextRefreshAt, setNextRefreshAt] = useState<Date | null>(null);
-  const [clock, setClock] = useState(Date.now());
+  const [clock, setClock] = useState(0);
   const [search, setSearch] = useState("");
   const [invalidRecords, setInvalidRecords] = useState(0);
+  const [persistence, setPersistence] = useState<PersistenceMetrics>({ status: "loading", observations: 0, forecasts: 0, accuracySamples: 0, temperatureMae: null });
 
   async function loadWeather() {
     setLoading(true); setError(false);
     try {
-      const today = new Date();
-      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-      const oneYearAgo = new Date(today); oneYearAgo.setDate(today.getDate() - 365);
-      const isoDate = (date: Date) => date.toISOString().slice(0, 10);
-      const common = { latitude: "-23.4628", longitude: "-46.5333", hourly: "temperature_2m,relative_humidity_2m,precipitation_probability,wind_speed_10m", timezone: "America/Sao_Paulo" };
-      const historicalParams = new URLSearchParams({ ...common, start_date: isoDate(oneYearAgo), end_date: isoDate(yesterday) });
-      const forecastParams = new URLSearchParams({ ...common, forecast_days: "16" });
-      const [historicalResponse, forecastResponse] = await Promise.all([
-        fetch(`https://historical-forecast-api.open-meteo.com/v1/forecast?${historicalParams}`),
-        fetch(`https://api.open-meteo.com/v1/forecast?${forecastParams}`),
-      ]);
-      if (!historicalResponse.ok || !forecastResponse.ok) throw new Error("Falha na API");
-      const [historical, forecast] = await Promise.all([historicalResponse.json(), forecastResponse.json()]) as [WeatherResponse, WeatherResponse];
-      const toRows = (payload: WeatherResponse, source: WeatherPoint["source"]) => payload.hourly.time.map((time, index) => ({ time, temperature: payload.hourly.temperature_2m[index], humidity: payload.hourly.relative_humidity_2m[index], rain: payload.hourly.precipitation_probability[index], wind: payload.hourly.wind_speed_10m[index], source }));
-      const rawRows = [...toRows(historical, "historical"), ...toRows(forecast, "forecast")];
-      const isValid = (row: WeatherPoint) => [row.temperature, row.humidity, row.rain, row.wind].every(Number.isFinite);
-      setInvalidRecords(rawRows.filter((row) => !isValid(row)).length);
-      const rows = rawRows.filter(isValid);
-      setWeather(Array.from(new Map(rows.map((row) => [row.time, row])).values()).sort((a, b) => a.time.localeCompare(b.time)));
-      setUpdatedAt(new Date());
+      const response = await fetch("/api/weather", { cache: "no-store" });
+      if (!response.ok) throw new Error("Falha na API interna");
+      const payload = await response.json() as WeatherApiResponse;
+      setInvalidRecords(payload.invalidRecords);
+      setWeather(payload.points);
+      setPersistence(payload.persistence);
+      setUpdatedAt(new Date(payload.collectedAt));
       setNextRefreshAt(new Date(Date.now() + AUTO_REFRESH_MS));
     } catch { setError(true); } finally { setLoading(false); }
   }
 
   useEffect(() => {
     let lastRefresh = Date.now();
-    const refresh = () => { lastRefresh = Date.now(); loadWeather(); };
+    const refresh = () => { lastRefresh = Date.now(); setClock(lastRefresh); loadWeather(); };
     refresh();
     const refreshTimer = window.setInterval(refresh, AUTO_REFRESH_MS);
     const clockTimer = window.setInterval(() => setClock(Date.now()), 30_000);
@@ -106,15 +95,15 @@ export default function Home() {
   const visible = useMemo(() => period === "forecast" ? forecast : historical.slice(-Number(period) * 24), [forecast, historical, period]);
   const current = useMemo(() => {
     if (!forecast.length) return undefined;
-    const now = Date.now();
+    const now = clock;
     return forecast.reduce((closest, point) => Math.abs(new Date(point.time).getTime() - now) < Math.abs(new Date(closest.time).getTime() - now) ? point : closest);
-  }, [forecast]);
+  }, [forecast, clock]);
   const maxTemperature = visible.length ? Math.max(...visible.map((point) => point.temperature)) : 0;
   const maxRain = visible.length ? Math.max(...visible.map((point) => point.rain)) : 0;
   const duplicates = weather.length - new Set(weather.map((point) => point.time)).size;
   const missingValues = weather.reduce((total, point) => total + [point.temperature, point.humidity, point.rain, point.wind].filter((value) => !Number.isFinite(value)).length, 0);
   const minutesToRefresh = nextRefreshAt ? Math.max(0, Math.ceil((nextRefreshAt.getTime() - clock) / 60_000)) : null;
-  const next24Hours = forecast.filter((point) => new Date(point.time).getTime() >= Date.now() - 60 * 60 * 1000).slice(0, 24);
+  const next24Hours = forecast.filter((point) => new Date(point.time).getTime() >= clock - 60 * 60 * 1000).slice(0, 24);
   const riskRain = next24Hours.length ? Math.max(...next24Hours.map((point) => point.rain)) : 0;
   const riskWind = next24Hours.length ? Math.max(...next24Hours.map((point) => point.wind)) : 0;
   const temperatureRange = next24Hours.length ? Math.max(...next24Hours.map((point) => point.temperature)) - Math.min(...next24Hours.map((point) => point.temperature)) : 0;
@@ -141,7 +130,7 @@ export default function Home() {
       <a className="github-link" href="https://github.com/MatheusAlmeidaSiqueira/data-automation" target="_blank" rel="noreferrer"><ExternalLink size={17} /> Código-fonte</a>
     </header>
     <div className="page-container">
-      <section className="overview-head" id="overview"><div><div className="location-line"><span className="status-dot" /> Guarulhos, São Paulo</div><h1>Monitoramento meteorológico</h1><p>Um ano de histórico e 16 dias de previsão transformados em indicadores para análise.</p><div className="automation-status"><span><RefreshCw size={13} /> Atualização automática ativa</span><b>{minutesToRefresh === null ? "Sincronizando…" : `Próxima consulta em ${minutesToRefresh} min`}</b></div></div><button className="refresh-button" onClick={loadWeather} disabled={loading}><RefreshCw size={17} className={loading ? "spin" : ""} /> {loading ? "Carregando base…" : "Atualizar agora"}</button></section>
+      <section className="overview-head" id="overview"><div><div className="location-line"><span className="status-dot" /> Guarulhos, São Paulo</div><h1>Monitoramento meteorológico</h1><p>Um ano de histórico e 16 dias de previsão transformados em indicadores para análise.</p><div className="automation-status"><span><RefreshCw size={13} /> API e atualização automática ativas</span><b>{minutesToRefresh === null ? "Sincronizando…" : `Próxima consulta em ${minutesToRefresh} min`}</b></div></div><button className="refresh-button" onClick={loadWeather} disabled={loading}><RefreshCw size={17} className={loading ? "spin" : ""} /> {loading ? "Carregando base…" : "Atualizar agora"}</button></section>
       {error && <div className="error-state">Não foi possível consultar a previsão agora. Tente atualizar novamente em alguns instantes.</div>}
       <section className="metric-grid" aria-label="Indicadores atuais">
         <MetricCard icon={<Thermometer size={21} />} label="Temperatura prevista" value={current ? `${current.temperature.toFixed(1)} °C` : "—"} note="Horário mais próximo do atual" tone="blue" />
@@ -160,9 +149,10 @@ export default function Home() {
         <aside className="panel insight-panel"><div className="panel-head"><div><span className="eyebrow">LEITURA RÁPIDA</span><h2>Destaques da previsão</h2><p>Principais pontos do período</p></div></div><div className="insight-list"><div><span className="insight-icon warm"><Thermometer size={19} /></span><p><small>Maior temperatura</small><strong>{visible.length ? `${maxTemperature.toFixed(1)} °C` : "—"}</strong></p></div><div><span className="insight-icon rain"><CloudRain size={19} /></span><p><small>Pico de chuva</small><strong>{visible.length ? `${maxRain}%` : "—"}</strong></p></div><div><span className="insight-icon records"><Database size={19} /></span><p><small>Registros analisados</small><strong>{visible.length || "—"}</strong></p></div></div><div className="source-note"><ShieldCheck size={17} /><span><strong>Fonte verificada</strong>Dados fornecidos pela Open-Meteo API.</span></div></aside>
         <article className="panel rain-panel"><div className="panel-head"><div><span className="eyebrow">PRECIPITAÇÃO</span><h2>Probabilidade de chuva</h2><p>Percentual estimado por horário</p></div><span className="panel-unit">0–100%</span></div>{visible.length ? <RainChart data={visible} /> : <div className="chart-loading small">Carregando…</div>}</article>
         <article className="panel quality-panel" id="quality"><div className="panel-head"><div><span className="eyebrow">CONFIABILIDADE</span><h2>Qualidade da base</h2><p>Métricas calculadas após validação dos dados recebidos</p></div><span className={missingValues === 0 && duplicates === 0 ? "approved" : "attention"}>{missingValues === 0 && duplicates === 0 ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />} {missingValues === 0 && duplicates === 0 ? "Base tratada" : "Requer atenção"}</span></div><div className="quality-stats"><div><strong>{weather.length.toLocaleString("pt-BR") || "—"}</strong><span>registros válidos</span></div><div><strong>{missingValues}</strong><span>valores ausentes</span></div><div><strong>{duplicates}</strong><span>duplicidades</span></div><div><strong>{invalidRecords}</strong><span>registros rejeitados</span></div></div></article>
+        <article className="panel persistence-panel"><div className="panel-head"><div><span className="eyebrow">HISTÓRICO PRÓPRIO</span><h2>Persistência e precisão</h2><p>Observações e previsões armazenadas para auditoria e comparação futura</p></div><span className={persistence.status === "active" ? "approved" : "attention"}><Database size={15} /> {persistence.status === "active" ? "Banco ativo" : "Inicializando"}</span></div><div className="persistence-stats"><div><History size={18} /><p><strong>{persistence.observations.toLocaleString("pt-BR")}</strong><span>observações salvas</span></p></div><div><Database size={18} /><p><strong>{persistence.forecasts.toLocaleString("pt-BR")}</strong><span>previsões versionadas</span></p></div><div><Target size={18} /><p><strong>{persistence.temperatureMae == null ? "Coletando" : `${persistence.temperatureMae.toFixed(2)} °C`}</strong><span>{persistence.accuracySamples ? `MAE em ${persistence.accuracySamples} comparações` : "precisão disponível após o primeiro ciclo"}</span></p></div></div></article>
       </section>
       <section className="data-section" id="data"><div className="section-heading"><div><span className="eyebrow">EXPLORADOR DE DADOS</span><h2>Consulte a base tratada</h2><p>Exibição limitada a 50 linhas; o download inclui todo o período selecionado.</p></div><button className="download-button" onClick={downloadCsv}><Download size={15} /> Baixar CSV ({visible.length.toLocaleString("pt-BR")} linhas)</button></div><div className="table-toolbar"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar data ou horário…" aria-label="Pesquisar registros" /><span>{filteredRows.length} resultados exibidos</span></div><div className="table-wrap"><table><thead><tr><th>Data e hora</th><th>Origem</th><th>Temperatura</th><th>Umidade</th><th>Chuva</th><th>Vento</th></tr></thead><tbody>{filteredRows.map((point) => <tr key={`${point.source}-${point.time}`}><td>{new Date(point.time).toLocaleString("pt-BR")}</td><td><span className={`source-pill ${point.source}`}>{point.source === "forecast" ? "Previsão" : "Histórico"}</span></td><td>{point.temperature.toFixed(1)} °C</td><td>{point.humidity}%</td><td>{point.rain}%</td><td>{point.wind.toFixed(1)} km/h</td></tr>)}</tbody></table></div></section>
-      <section className="pipeline-section" id="pipeline"><div><span className="eyebrow">ENGENHARIA DE DADOS</span><h2>Do dado bruto à informação</h2><p>A plataforma apresenta o resultado de um pipeline modular, validado e testável.</p></div><div className="pipeline-flow">{["Open-Meteo API", "Extração", "Transformação", "Validação", "Dashboard"].map((step, index) => <div key={step} className="pipeline-step"><span>{String(index + 1).padStart(2, "0")}</span><strong>{step}</strong>{index < 4 && <b>→</b>}</div>)}</div></section>
+      <section className="pipeline-section" id="pipeline"><div><span className="eyebrow">ENGENHARIA DE DADOS</span><h2>Do dado bruto à informação</h2><p>API interna, validação, persistência histórica e visualização em um fluxo rastreável.</p></div><div className="pipeline-flow">{["Open-Meteo", "API interna", "Validação", "Banco histórico", "Dashboard"].map((step, index) => <div key={step} className="pipeline-step"><span>{String(index + 1).padStart(2, "0")}</span><strong>{step}</strong>{index < 4 && <b>→</b>}</div>)}</div></section>
       <footer><div><strong>WeatherFlow Analytics</strong><span>Projeto de dados desenvolvido por Matheus Almeida Siqueira</span></div><p>{updatedAt ? `Dados sincronizados em ${updatedAt.toLocaleString("pt-BR")} · atualização automática a cada 15 minutos` : "Aguardando atualização dos dados"}</p></footer>
     </div>
   </main>;
