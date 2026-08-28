@@ -1,12 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, AlertTriangle, CalendarDays, CheckCircle2, CloudRain, Database, Download, Droplets, ExternalLink, History, RefreshCw, Search, ShieldCheck, Target, Thermometer, Wind } from "lucide-react";
 
 type WeatherPoint = { time: string; temperature: number; humidity: number; rain: number; wind: number; source: "historical" | "forecast"; rainMetric?: "amount" | "probability" | "derived_risk" };
 type PersistenceMetrics = { status: string; observations: number; forecasts: number; accuracySamples: number; temperatureMae: number | null; lastRunAt?: string; lastRunStatus?: string; provider?: string };
 type WeatherApiResponse = { points: WeatherPoint[]; invalidRecords: number; collectedAt: string; persistence: PersistenceMetrics; sources?: { forecast?: string } };
 type Period = "forecast" | "30" | "90" | "365";
+type SectionId = "overview" | "forecast" | "quality" | "data" | "pipeline";
+const NAV_ITEMS: { id: SectionId; label: string }[] = [
+  { id: "overview", label: "Visão geral" },
+  { id: "forecast", label: "Previsão" },
+  { id: "quality", label: "Qualidade" },
+  { id: "data", label: "Dados" },
+  { id: "pipeline", label: "Pipeline" },
+];
 const PERIODS: { value: Period; label: string }[] = [
   { value: "forecast", label: "Previsão 16d" },
   { value: "30", label: "Histórico 30d" },
@@ -63,6 +71,9 @@ export default function Home() {
   const [invalidRecords, setInvalidRecords] = useState(0);
   const [persistence, setPersistence] = useState<PersistenceMetrics>({ status: "loading", observations: 0, forecasts: 0, accuracySamples: 0, temperatureMae: null });
   const [forecastProvider, setForecastProvider] = useState("open_meteo");
+  const [activeSection, setActiveSection] = useState<SectionId>("overview");
+  const navigationLocked = useRef(false);
+  const navigationUnlockTimer = useRef<number | undefined>(undefined);
 
   async function loadWeather() {
     setLoading(true); setError(false);
@@ -95,6 +106,32 @@ export default function Home() {
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, []);
+
+  useEffect(() => {
+    const sections = NAV_ITEMS.map(({ id }) => document.getElementById(id)).filter((section): section is HTMLElement => Boolean(section));
+    const observer = new IntersectionObserver((entries) => {
+      if (navigationLocked.current) return;
+      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (visible?.target.id) setActiveSection(visible.target.id as SectionId);
+    }, { rootMargin: "-90px 0px -60% 0px", threshold: [0, .15, .4] });
+    sections.forEach((section) => observer.observe(section));
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(navigationUnlockTimer.current);
+    };
+  }, []);
+
+  function navigateToSection(event: React.MouseEvent<HTMLAnchorElement>, id: SectionId) {
+    event.preventDefault();
+    const target = document.getElementById(id);
+    if (!target) return;
+    navigationLocked.current = true;
+    window.clearTimeout(navigationUnlockTimer.current);
+    navigationUnlockTimer.current = window.setTimeout(() => { navigationLocked.current = false; }, 1200);
+    setActiveSection(id);
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.replaceState(null, "", `#${id}`);
+  }
   const forecast = useMemo(() => weather.filter((point) => point.source === "forecast"), [weather]);
   const historical = useMemo(() => weather.filter((point) => point.source === "historical"), [weather]);
   const visible = useMemo(() => period === "forecast" ? (forecast.length ? forecast : historical.slice(-30 * 24)) : historical.slice(-Number(period) * 24), [forecast, historical, period]);
@@ -131,7 +168,7 @@ export default function Home() {
   return <main className="app-shell">
     <header className="topbar">
       <a className="brand" href="#overview" aria-label="WeatherFlow Analytics"><span className="brand-mark"><Activity size={21} /></span><span><strong>WeatherFlow</strong><small>Analytics</small></span></a>
-      <nav aria-label="Navegação principal"><a className="active" href="#overview">Visão geral</a><a href="#forecast">Previsão</a><a href="#quality">Qualidade</a><a href="#data">Dados</a><a href="#pipeline">Pipeline</a></nav>
+      <nav aria-label="Navegação principal">{NAV_ITEMS.map((item) => <a key={item.id} href={`#${item.id}`} className={activeSection === item.id ? "active" : ""} aria-current={activeSection === item.id ? "page" : undefined} onClick={(event) => navigateToSection(event, item.id)}>{item.label}</a>)}</nav>
       <a className="github-link" href="https://github.com/MatheusAlmeidaSiqueira/data-automation" target="_blank" rel="noreferrer"><ExternalLink size={17} /> Código-fonte</a>
     </header>
     <div className="page-container">

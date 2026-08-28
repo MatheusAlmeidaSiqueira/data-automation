@@ -38,6 +38,13 @@ test("dashboard exposes accessible data controls", () => {
   assert.match(page, /rainMetric/);
 });
 
+test("navigation scrolls to sections and tracks the active item", () => {
+  assert.match(page, /IntersectionObserver/);
+  assert.match(page, /scrollIntoView\(\{ behavior: "smooth"/);
+  assert.match(page, /activeSection === item\.id/);
+  assert.match(page, /aria-current=/);
+});
+
 test("production build emits the server entrypoint", async () => {
   await access(new URL("../dist/server/index.js", import.meta.url));
 });
