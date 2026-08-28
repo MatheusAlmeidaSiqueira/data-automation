@@ -1,0 +1,169 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Activity, AlertTriangle, CalendarDays, CheckCircle2, CloudRain, Database, Download, Droplets, ExternalLink, RefreshCw, Search, ShieldCheck, Thermometer, Wind } from "lucide-react";
+
+type WeatherPoint = { time: string; temperature: number; humidity: number; rain: number; wind: number; source: "historical" | "forecast" };
+type WeatherResponse = { hourly: { time: string[]; temperature_2m: number[]; relative_humidity_2m: number[]; precipitation_probability: number[]; wind_speed_10m: number[] } };
+type Period = "forecast" | "30" | "90" | "365";
+const PERIODS: { value: Period; label: string }[] = [
+  { value: "forecast", label: "Previsão 16d" },
+  { value: "30", label: "Histórico 30d" },
+  { value: "90", label: "90 dias" },
+  { value: "365", label: "1 ano" },
+];
+const AUTO_REFRESH_MS = 15 * 60 * 1000;
+
+function formatHour(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit" }).format(new Date(value));
+}
+
+function LineChart({ data }: { data: WeatherPoint[] }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const width = 960, height = 230;
+  const temperatures = data.map((point) => point.temperature);
+  const min = Math.floor(Math.min(...temperatures) - 2), max = Math.ceil(Math.max(...temperatures) + 2);
+  const range = Math.max(max - min, 1);
+  const points = data.map((point, index) => `${(index / Math.max(data.length - 1, 1)) * width},${height - ((point.temperature - min) / range) * height}`).join(" ");
+  const area = `0,${height} ${points} ${width},${height}`;
+  const hoveredPoint = hovered === null ? null : data[hovered];
+  return <div className="chart-wrap" aria-label="Gráfico interativo da evolução da temperatura">
+    <div className="chart-scale"><span>{max}°</span><span>{Math.round((max + min) / 2)}°</span><span>{min}°</span></div>
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" onMouseLeave={() => setHovered(null)} onMouseMove={(event) => { const rect = event.currentTarget.getBoundingClientRect(); setHovered(Math.min(data.length - 1, Math.max(0, Math.round(((event.clientX - rect.left) / rect.width) * (data.length - 1))))); }}><defs><linearGradient id="tempFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2f73ff" stopOpacity=".28" /><stop offset="100%" stopColor="#2f73ff" stopOpacity="0" /></linearGradient></defs>
+      {[0, .5, 1].map((position) => <line key={position} x1="0" x2={width} y1={position * height} y2={position * height} stroke="#e7edf6" strokeDasharray="5 7" />)}
+      <polygon points={area} fill="url(#tempFill)" /><polyline points={points} fill="none" stroke="#2f73ff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      {hoveredPoint && <><line x1={(hovered! / Math.max(data.length - 1, 1)) * width} x2={(hovered! / Math.max(data.length - 1, 1)) * width} y1="0" y2={height} stroke="#10233f" strokeDasharray="4 5" /><circle cx={(hovered! / Math.max(data.length - 1, 1)) * width} cy={height - ((hoveredPoint.temperature - min) / range) * height} r="7" fill="#fff" stroke="#2f73ff" strokeWidth="4" /></>}
+    </svg>
+    {hoveredPoint && <div className="chart-tooltip" style={{ left: `${(hovered! / Math.max(data.length - 1, 1)) * 100}%` }}><strong>{hoveredPoint.temperature.toFixed(1)} °C</strong><span>{formatHour(hoveredPoint.time)}</span><small>{hoveredPoint.source === "forecast" ? "Previsão" : "Histórico"}</small></div>}
+    <div className="chart-labels">{[0, Math.floor(data.length / 3), Math.floor(data.length * 2 / 3), data.length - 1].map((index) => <span key={index}>{data[index] ? formatHour(data[index].time) : "—"}</span>)}</div>
+  </div>;
+}
+
+function RainChart({ data }: { data: WeatherPoint[] }) {
+  const grouped = data.filter((_, index) => index % Math.max(Math.floor(data.length / 20), 1) === 0).slice(0, 20);
+  return <div className="rain-chart" aria-label="Gráfico de probabilidade de chuva">{grouped.map((point) => <div className="rain-column" key={point.time} title={`${formatHour(point.time)} — ${point.rain}%`}><div className="rain-bar" style={{ height: `${Math.max(point.rain, 3)}%` }} /></div>)}</div>;
+}
+
+function MetricCard({ icon, label, value, note, tone }: { icon: React.ReactNode; label: string; value: string; note: string; tone: string }) {
+  return <article className="metric-card"><div className={`metric-icon ${tone}`}>{icon}</div><div><p className="metric-label">{label}</p><strong className="metric-value">{value}</strong><p className="metric-note">{note}</p></div></article>;
+}
+
+export default function Home() {
+  const [weather, setWeather] = useState<WeatherPoint[]>([]);
+  const [period, setPeriod] = useState<Period>("forecast");
+  const [loading, setLoading] = useState(true), [error, setError] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [nextRefreshAt, setNextRefreshAt] = useState<Date | null>(null);
+  const [clock, setClock] = useState(Date.now());
+  const [search, setSearch] = useState("");
+  const [invalidRecords, setInvalidRecords] = useState(0);
+
+  async function loadWeather() {
+    setLoading(true); setError(false);
+    try {
+      const today = new Date();
+      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+      const oneYearAgo = new Date(today); oneYearAgo.setDate(today.getDate() - 365);
+      const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+      const common = { latitude: "-23.4628", longitude: "-46.5333", hourly: "temperature_2m,relative_humidity_2m,precipitation_probability,wind_speed_10m", timezone: "America/Sao_Paulo" };
+      const historicalParams = new URLSearchParams({ ...common, start_date: isoDate(oneYearAgo), end_date: isoDate(yesterday) });
+      const forecastParams = new URLSearchParams({ ...common, forecast_days: "16" });
+      const [historicalResponse, forecastResponse] = await Promise.all([
+        fetch(`https://historical-forecast-api.open-meteo.com/v1/forecast?${historicalParams}`),
+        fetch(`https://api.open-meteo.com/v1/forecast?${forecastParams}`),
+      ]);
+      if (!historicalResponse.ok || !forecastResponse.ok) throw new Error("Falha na API");
+      const [historical, forecast] = await Promise.all([historicalResponse.json(), forecastResponse.json()]) as [WeatherResponse, WeatherResponse];
+      const toRows = (payload: WeatherResponse, source: WeatherPoint["source"]) => payload.hourly.time.map((time, index) => ({ time, temperature: payload.hourly.temperature_2m[index], humidity: payload.hourly.relative_humidity_2m[index], rain: payload.hourly.precipitation_probability[index], wind: payload.hourly.wind_speed_10m[index], source }));
+      const rawRows = [...toRows(historical, "historical"), ...toRows(forecast, "forecast")];
+      const isValid = (row: WeatherPoint) => [row.temperature, row.humidity, row.rain, row.wind].every(Number.isFinite);
+      setInvalidRecords(rawRows.filter((row) => !isValid(row)).length);
+      const rows = rawRows.filter(isValid);
+      setWeather(Array.from(new Map(rows.map((row) => [row.time, row])).values()).sort((a, b) => a.time.localeCompare(b.time)));
+      setUpdatedAt(new Date());
+      setNextRefreshAt(new Date(Date.now() + AUTO_REFRESH_MS));
+    } catch { setError(true); } finally { setLoading(false); }
+  }
+
+  useEffect(() => {
+    let lastRefresh = Date.now();
+    const refresh = () => { lastRefresh = Date.now(); loadWeather(); };
+    refresh();
+    const refreshTimer = window.setInterval(refresh, AUTO_REFRESH_MS);
+    const clockTimer = window.setInterval(() => setClock(Date.now()), 30_000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastRefresh >= AUTO_REFRESH_MS) refresh();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.clearInterval(clockTimer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, []);
+  const forecast = useMemo(() => weather.filter((point) => point.source === "forecast"), [weather]);
+  const historical = useMemo(() => weather.filter((point) => point.source === "historical"), [weather]);
+  const visible = useMemo(() => period === "forecast" ? forecast : historical.slice(-Number(period) * 24), [forecast, historical, period]);
+  const current = useMemo(() => {
+    if (!forecast.length) return undefined;
+    const now = Date.now();
+    return forecast.reduce((closest, point) => Math.abs(new Date(point.time).getTime() - now) < Math.abs(new Date(closest.time).getTime() - now) ? point : closest);
+  }, [forecast]);
+  const maxTemperature = visible.length ? Math.max(...visible.map((point) => point.temperature)) : 0;
+  const maxRain = visible.length ? Math.max(...visible.map((point) => point.rain)) : 0;
+  const duplicates = weather.length - new Set(weather.map((point) => point.time)).size;
+  const missingValues = weather.reduce((total, point) => total + [point.temperature, point.humidity, point.rain, point.wind].filter((value) => !Number.isFinite(value)).length, 0);
+  const minutesToRefresh = nextRefreshAt ? Math.max(0, Math.ceil((nextRefreshAt.getTime() - clock) / 60_000)) : null;
+  const next24Hours = forecast.filter((point) => new Date(point.time).getTime() >= Date.now() - 60 * 60 * 1000).slice(0, 24);
+  const riskRain = next24Hours.length ? Math.max(...next24Hours.map((point) => point.rain)) : 0;
+  const riskWind = next24Hours.length ? Math.max(...next24Hours.map((point) => point.wind)) : 0;
+  const temperatureRange = next24Hours.length ? Math.max(...next24Hours.map((point) => point.temperature)) - Math.min(...next24Hours.map((point) => point.temperature)) : 0;
+  const riskIndex = Math.round(riskRain * .55 + Math.min(riskWind / 50 * 100, 100) * .25 + Math.min(temperatureRange / 15 * 100, 100) * .2);
+  const riskLabel = riskIndex < 35 ? "Baixo" : riskIndex < 65 ? "Moderado" : "Elevado";
+  const dailyForecast = useMemo(() => {
+    const grouped = new Map<string, WeatherPoint[]>();
+    forecast.forEach((point) => { const date = point.time.slice(0, 10); grouped.set(date, [...(grouped.get(date) ?? []), point]); });
+    return Array.from(grouped.entries()).slice(0, 7).map(([date, points]) => ({ date, min: Math.min(...points.map((point) => point.temperature)), max: Math.max(...points.map((point) => point.temperature)), rain: Math.max(...points.map((point) => point.rain)), wind: Math.max(...points.map((point) => point.wind)) }));
+  }, [forecast]);
+  const filteredRows = useMemo(() => visible.filter((point) => !search || point.time.toLowerCase().includes(search.toLowerCase()) || formatHour(point.time).includes(search)).slice(0, 50), [visible, search]);
+
+  function downloadCsv() {
+    const header = "data_hora,origem,temperatura_c,umidade_pct,chuva_pct,vento_kmh";
+    const rows = visible.map((point) => [point.time, point.source, point.temperature, point.humidity, point.rain, point.wind].join(","));
+    const url = URL.createObjectURL(new Blob([[header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = `weatherflow-${period}.csv`; link.click(); URL.revokeObjectURL(url);
+  }
+
+  return <main className="app-shell">
+    <header className="topbar">
+      <a className="brand" href="#overview" aria-label="WeatherFlow Analytics"><span className="brand-mark"><Activity size={21} /></span><span><strong>WeatherFlow</strong><small>Analytics</small></span></a>
+      <nav aria-label="Navegação principal"><a className="active" href="#overview">Visão geral</a><a href="#forecast">Previsão</a><a href="#quality">Qualidade</a><a href="#data">Dados</a><a href="#pipeline">Pipeline</a></nav>
+      <a className="github-link" href="https://github.com/MatheusAlmeidaSiqueira/data-automation" target="_blank" rel="noreferrer"><ExternalLink size={17} /> Código-fonte</a>
+    </header>
+    <div className="page-container">
+      <section className="overview-head" id="overview"><div><div className="location-line"><span className="status-dot" /> Guarulhos, São Paulo</div><h1>Monitoramento meteorológico</h1><p>Um ano de histórico e 16 dias de previsão transformados em indicadores para análise.</p><div className="automation-status"><span><RefreshCw size={13} /> Atualização automática ativa</span><b>{minutesToRefresh === null ? "Sincronizando…" : `Próxima consulta em ${minutesToRefresh} min`}</b></div></div><button className="refresh-button" onClick={loadWeather} disabled={loading}><RefreshCw size={17} className={loading ? "spin" : ""} /> {loading ? "Carregando base…" : "Atualizar agora"}</button></section>
+      {error && <div className="error-state">Não foi possível consultar a previsão agora. Tente atualizar novamente em alguns instantes.</div>}
+      <section className="metric-grid" aria-label="Indicadores atuais">
+        <MetricCard icon={<Thermometer size={21} />} label="Temperatura prevista" value={current ? `${current.temperature.toFixed(1)} °C` : "—"} note="Horário mais próximo do atual" tone="blue" />
+        <MetricCard icon={<Droplets size={21} />} label="Umidade relativa" value={current ? `${current.humidity}%` : "—"} note="Concentração de vapor no ar" tone="cyan" />
+        <MetricCard icon={<CloudRain size={21} />} label="Chance de chuva" value={current ? `${current.rain}%` : "—"} note="Probabilidade estimada" tone="violet" />
+        <MetricCard icon={<Wind size={21} />} label="Velocidade do vento" value={current ? `${current.wind.toFixed(1)} km/h` : "—"} note="Medição prevista a 10 metros" tone="amber" />
+      </section>
+      <section className={`risk-banner risk-${riskLabel.toLowerCase()}`} aria-label={`WeatherFlow Risk Index: ${riskIndex} de 100`}>
+        <div className="risk-score"><span>WeatherFlow</span><strong>{riskIndex}<small>/100</small></strong><b>Risk Index</b></div>
+        <div className="risk-copy"><span className="eyebrow">INDICADOR EXCLUSIVO</span><h2>Risco meteorológico {riskLabel.toLowerCase()}</h2><p>Índice calculado para as próximas 24 horas com chuva, vento e amplitude térmica.</p><div className="risk-factors"><span><CloudRain size={14} /> Chuva {riskRain}%</span><span><Wind size={14} /> Vento {riskWind.toFixed(1)} km/h</span><span><Thermometer size={14} /> Variação {temperatureRange.toFixed(1)} °C</span></div></div>
+        <div className="risk-gauge"><i style={{ width: `${riskIndex}%` }} /><span>0</span><span>100</span></div>
+      </section>
+      <section className="daily-section" id="forecast"><div className="section-heading"><div><span className="eyebrow">PRÓXIMOS DIAS</span><h2>Previsão diária</h2><p>Resumo de temperatura, chuva e vento para planejamento rápido.</p></div><span className="forecast-badge"><CalendarDays size={14} /> 7 dias</span></div><div className="daily-grid">{dailyForecast.map((day, index) => <article className={index === 0 ? "daily-card today" : "daily-card"} key={day.date}><div><span>{index === 0 ? "Hoje" : new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(new Date(`${day.date}T12:00:00`)).replace(".", "")}</span><small>{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(`${day.date}T12:00:00`))}</small></div><strong>{day.max.toFixed(0)}° <small>{day.min.toFixed(0)}°</small></strong><p><CloudRain size={13} /> {day.rain}%</p><p><Wind size={13} /> {day.wind.toFixed(0)} km/h</p></article>)}</div></section>
+      <section className="dashboard-grid">
+        <article className="panel temperature-panel"><div className="panel-head"><div><span className="eyebrow">TENDÊNCIA TÉRMICA</span><h2>Evolução da temperatura</h2><p>{period === "forecast" ? "Previsão futura hora a hora" : "Comportamento histórico no período selecionado"}</p></div><div className="period-control" aria-label="Selecionar período">{PERIODS.map((option) => <button key={option.value} className={period === option.value ? "selected" : ""} onClick={() => setPeriod(option.value)}>{option.label}</button>)}</div></div>{visible.length ? <LineChart data={visible} /> : <div className="chart-loading">Carregando série meteorológica…</div>}</article>
+        <aside className="panel insight-panel"><div className="panel-head"><div><span className="eyebrow">LEITURA RÁPIDA</span><h2>Destaques da previsão</h2><p>Principais pontos do período</p></div></div><div className="insight-list"><div><span className="insight-icon warm"><Thermometer size={19} /></span><p><small>Maior temperatura</small><strong>{visible.length ? `${maxTemperature.toFixed(1)} °C` : "—"}</strong></p></div><div><span className="insight-icon rain"><CloudRain size={19} /></span><p><small>Pico de chuva</small><strong>{visible.length ? `${maxRain}%` : "—"}</strong></p></div><div><span className="insight-icon records"><Database size={19} /></span><p><small>Registros analisados</small><strong>{visible.length || "—"}</strong></p></div></div><div className="source-note"><ShieldCheck size={17} /><span><strong>Fonte verificada</strong>Dados fornecidos pela Open-Meteo API.</span></div></aside>
+        <article className="panel rain-panel"><div className="panel-head"><div><span className="eyebrow">PRECIPITAÇÃO</span><h2>Probabilidade de chuva</h2><p>Percentual estimado por horário</p></div><span className="panel-unit">0–100%</span></div>{visible.length ? <RainChart data={visible} /> : <div className="chart-loading small">Carregando…</div>}</article>
+        <article className="panel quality-panel" id="quality"><div className="panel-head"><div><span className="eyebrow">CONFIABILIDADE</span><h2>Qualidade da base</h2><p>Métricas calculadas após validação dos dados recebidos</p></div><span className={missingValues === 0 && duplicates === 0 ? "approved" : "attention"}>{missingValues === 0 && duplicates === 0 ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />} {missingValues === 0 && duplicates === 0 ? "Base tratada" : "Requer atenção"}</span></div><div className="quality-stats"><div><strong>{weather.length.toLocaleString("pt-BR") || "—"}</strong><span>registros válidos</span></div><div><strong>{missingValues}</strong><span>valores ausentes</span></div><div><strong>{duplicates}</strong><span>duplicidades</span></div><div><strong>{invalidRecords}</strong><span>registros rejeitados</span></div></div></article>
+      </section>
+      <section className="data-section" id="data"><div className="section-heading"><div><span className="eyebrow">EXPLORADOR DE DADOS</span><h2>Consulte a base tratada</h2><p>Exibição limitada a 50 linhas; o download inclui todo o período selecionado.</p></div><button className="download-button" onClick={downloadCsv}><Download size={15} /> Baixar CSV ({visible.length.toLocaleString("pt-BR")} linhas)</button></div><div className="table-toolbar"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar data ou horário…" aria-label="Pesquisar registros" /><span>{filteredRows.length} resultados exibidos</span></div><div className="table-wrap"><table><thead><tr><th>Data e hora</th><th>Origem</th><th>Temperatura</th><th>Umidade</th><th>Chuva</th><th>Vento</th></tr></thead><tbody>{filteredRows.map((point) => <tr key={`${point.source}-${point.time}`}><td>{new Date(point.time).toLocaleString("pt-BR")}</td><td><span className={`source-pill ${point.source}`}>{point.source === "forecast" ? "Previsão" : "Histórico"}</span></td><td>{point.temperature.toFixed(1)} °C</td><td>{point.humidity}%</td><td>{point.rain}%</td><td>{point.wind.toFixed(1)} km/h</td></tr>)}</tbody></table></div></section>
+      <section className="pipeline-section" id="pipeline"><div><span className="eyebrow">ENGENHARIA DE DADOS</span><h2>Do dado bruto à informação</h2><p>A plataforma apresenta o resultado de um pipeline modular, validado e testável.</p></div><div className="pipeline-flow">{["Open-Meteo API", "Extração", "Transformação", "Validação", "Dashboard"].map((step, index) => <div key={step} className="pipeline-step"><span>{String(index + 1).padStart(2, "0")}</span><strong>{step}</strong>{index < 4 && <b>→</b>}</div>)}</div></section>
+      <footer><div><strong>WeatherFlow Analytics</strong><span>Projeto de dados desenvolvido por Matheus Almeida Siqueira</span></div><p>{updatedAt ? `Dados sincronizados em ${updatedAt.toLocaleString("pt-BR")} · atualização automática a cada 15 minutos` : "Aguardando atualização dos dados"}</p></footer>
+    </div>
+  </main>;
+}
