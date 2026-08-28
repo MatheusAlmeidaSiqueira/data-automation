@@ -7,12 +7,14 @@ export const weatherObservations = sqliteTable("weather_observations", {
   humidity: real("humidity").notNull(),
   precipitation: real("precipitation").notNull(),
   windSpeed: real("wind_speed").notNull(),
+  provider: text("provider").notNull().default("open_meteo"),
   collectedAt: text("collected_at").notNull(),
 }, (table) => [uniqueIndex("observations_observed_at_unique").on(table.observedAt)]);
 
 export const weatherForecasts = sqliteTable("weather_forecasts", {
   id: text("id").primaryKey(),
   issuedOn: text("issued_on").notNull(),
+  issuedAt: text("issued_at"),
   validAt: text("valid_at").notNull(),
   temperature: real("temperature").notNull(),
   humidity: real("humidity").notNull(),
@@ -22,7 +24,8 @@ export const weatherForecasts = sqliteTable("weather_forecasts", {
   windSpeed: real("wind_speed").notNull(),
   collectedAt: text("collected_at").notNull(),
 }, (table) => [
-  uniqueIndex("forecasts_issue_valid_unique").on(table.issuedOn, table.validAt),
+  uniqueIndex("forecasts_issued_at_valid_provider_unique").on(table.issuedAt, table.validAt, table.provider),
+  index("forecasts_issued_at_idx").on(table.issuedAt),
   index("forecasts_valid_at_idx").on(table.validAt),
 ]);
 
@@ -34,5 +37,7 @@ export const pipelineRuns = sqliteTable("pipeline_runs", {
   fetchedRecords: integer("fetched_records").notNull(),
   rejectedRecords: integer("rejected_records").notNull(),
   provider: text("provider").notNull().default("open_meteo"),
+  trigger: text("trigger").notNull().default("scheduled"),
+  durationMs: integer("duration_ms"),
   message: text("message"),
 });

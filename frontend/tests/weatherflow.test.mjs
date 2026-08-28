@@ -1,41 +1,43 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
-const root = new URL("../", import.meta.url);
-const read = (path) => readFile(new URL(path, root), "utf8");
 
-test("frontend consumes the internal weather API", async () => {
-  const page = await read("app/page.tsx");
+const route = await readFile(new URL("../app/api/weather/route.ts", import.meta.url), "utf8");
+const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+const schema = await readFile(new URL("../db/schema.ts", import.meta.url), "utf8");
+const migration = await readFile(new URL("../drizzle/0002_adorable_ted_forrester.sql", import.meta.url), "utf8");
 
-  assert.match(page, /fetch\("\/api\/weather"/);
-  assert.match(page, /Persistência e monitoramento/);
-  assert.match(page, /fonte ativa da previsão/);
-  assert.match(page, /Banco ativo/);
+test("public weather endpoint is read-only", () => {
+  const getHandler = route.slice(route.indexOf("export async function GET"), route.indexOf("export async function POST"));
+  assert.match(getHandler, /FROM weather_observations/);
+  assert.match(getHandler, /FROM weather_forecasts/);
+  assert.doesNotMatch(getHandler, /\bfetch\s*\(/);
+  assert.doesNotMatch(getHandler, /\bINSERT\b/);
 });
 
-test("weather API validates, persists and audits records", async () => {
-  const route = await read("app/api/weather/route.ts");
-
-  assert.match(route, /archive-api\.open-meteo\.com/);
-  assert.match(route, /api\.met\.no\/weatherapi\/locationforecast/);
+test("collector validates, retries, falls back and rate limits", () => {
+  assert.match(route, /AbortSignal\.timeout\(REQUEST_TIMEOUT_MS\)/);
+  assert.match(route, /schema\.parse/);
+  assert.match(route, /Promise\.allSettled/);
   assert.match(route, /met_norway_fallback/);
-  assert.match(route, /INSERT INTO weather_observations/);
-  assert.match(route, /INSERT INTO weather_forecasts/);
-  assert.match(route, /INSERT INTO pipeline_runs/);
-  assert.match(route, /AVG\(ABS\(f\.temperature - o\.temperature\)\)/);
+  assert.match(route, /COLLECTION_COOLDOWN_MS/);
+  assert.match(route, /status:\s*"skipped"/);
 });
 
-test("database migration creates the complete analytical schema", async () => {
-  const migration = await read("drizzle/0000_dizzy_warpath.sql");
-  const monitoringMigration = await read("drizzle/0001_petite_raza.sql");
+test("forecast history has a timestamped immutable identity", () => {
+  assert.match(schema, /issuedAt:\s*text\("issued_at"\)/);
+  assert.match(schema, /forecasts_issued_at_valid_provider_unique/);
+  assert.match(migration, /DROP INDEX `forecasts_issue_valid_unique`/);
+  assert.match(migration, /ADD `issued_at` text/);
+});
 
-  assert.match(migration, /CREATE TABLE `weather_observations`/);
-  assert.match(migration, /CREATE TABLE `weather_forecasts`/);
-  assert.match(migration, /CREATE TABLE `pipeline_runs`/);
-  assert.match(monitoringMigration, /ADD `provider`/);
-  assert.match(monitoringMigration, /ADD `rain_metric`/);
+test("dashboard exposes accessible data controls", () => {
+  assert.match(page, /aria-pressed=/);
+  assert.match(page, /role="alert"/);
+  assert.match(page, /<caption className="sr-only">/);
+  assert.match(page, /rainMetric/);
 });
 
 test("production build emits the server entrypoint", async () => {
-  await access(new URL("dist/server/index.js", root));
+  await access(new URL("../dist/server/index.js", import.meta.url));
 });
